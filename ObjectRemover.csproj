@@ -24,7 +24,7 @@
     <CopyLocalLockFileAssemblies>true</CopyLocalLockFileAssemblies>
     <ProduceReferenceAssembly>false</ProduceReferenceAssembly>
     <Deterministic>false</Deterministic>
-    <AssemblyVersion>1.0.*</AssemblyVersion>
+    <AssemblyVersion>0.2.*</AssemblyVersion>
     <GenerateDocumentationFile>false</GenerateDocumentationFile>
     <NoWarn>1701;1702;CS7035;MSB3277;CA1416</NoWarn>
 

@@ -103,6 +103,19 @@ internal sealed unsafe class MaskCanvas : Control
         Fit();
     }
 
+    /// <summary>Forget the image, mask, overlay, undo history and any preview result.</summary>
+    public void ClearAll()
+    {
+        showResult = false;
+        resultImage = null;
+        baseImage = null;
+        mask = null;
+        undo.Clear();
+        overlay?.Dispose();
+        overlay = null;
+        Invalidate();
+    }
+
     public void SetResultImage(Bitmap? image)
     {
         resultImage = image;

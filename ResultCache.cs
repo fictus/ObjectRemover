@@ -48,6 +48,14 @@ internal static class ResultCache
         }
     }
 
+    public static void Clear()
+    {
+        lock (StateLock)
+        {
+            latest = null;
+        }
+    }
+
     public static void Store(string key, string runKey, InpaintPatch? patch, string? error)
     {
         lock (StateLock)

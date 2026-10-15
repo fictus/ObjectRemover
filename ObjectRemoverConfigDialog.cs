@@ -26,7 +26,7 @@ internal sealed unsafe class ObjectRemoverConfigDialog : EffectConfigForm<Object
     private readonly CheckBox autoCheck = new() { Text = "Preview automatically after each stroke", AutoSize = true };
     private readonly CheckBox showResultCheck = new() { Text = "Show result (uncheck to see the mask)", AutoSize = true };
     private readonly Button previewBtn = new() { Text = "Preview removal", Height = 32, Dock = DockStyle.Top };
-    private readonly Label statusLabel = new() { AutoSize = false, Dock = DockStyle.Fill };
+    private readonly TextBox statusLabel = new() { Multiline = true, ReadOnly = true, ScrollBars = ScrollBars.Vertical, BorderStyle = BorderStyle.None, Dock = DockStyle.Fill, TabStop = false };
     private readonly Button okBtn = new() { Text = "OK", Width = 90, Height = 30 };
     private readonly Button cancelBtn = new() { Text = "Cancel", Width = 90, Height = 30 };
     private readonly System.Windows.Forms.Timer timer = new() { Interval = 250 };
@@ -47,8 +47,8 @@ internal sealed unsafe class ObjectRemoverConfigDialog : EffectConfigForm<Object
     {
         Text = "AI Object Remover";
         UseAppThemeColors = true;
-        ClientSize = new Size(S(1080), S(720));
-        MinimumSize = new Size(S(860), S(600));
+        ClientSize = new Size(S(1180), S(760));
+        MinimumSize = new Size(S(960), S(680));
         BuildUi();
         ApplyTheme(this);
         WireEvents();
@@ -65,24 +65,26 @@ internal sealed unsafe class ObjectRemoverConfigDialog : EffectConfigForm<Object
     {
         modelBox.Items.AddRange(new object[]
         {
-            "LaMa - best quality (recommended)",
-            "MI-GAN - fast, works well on GPU",
+            "LaMa (best quality)",
+            "MI-GAN (fast)",
         });
         modelBox.SelectedIndex = 0;
+        modelBox.DropDownWidth = S(280);
 
         procBox.Items.AddRange(new object[]
         {
-            "Auto (GPU if it works, else CPU)",
+            "Auto (GPU, else CPU)",
             "GPU (DirectML)",
             "CPU only",
         });
         procBox.SelectedIndex = 0;
+        procBox.DropDownWidth = S(280);
 
         brushTrack.Value = 40;
         brushTrack.Dock = DockStyle.Fill;
         brushTrack.Height = S(26);
 
-        var side = new Panel { Dock = DockStyle.Right, Width = S(330), Padding = new Padding(S(8)) };
+        var side = new Panel { Dock = DockStyle.Right, Width = S(400), Padding = new Padding(S(8)) };
 
         // --- bottom buttons
         var bottom = new FlowLayoutPanel
@@ -99,14 +101,14 @@ internal sealed unsafe class ObjectRemoverConfigDialog : EffectConfigForm<Object
 
         // --- status
         statusLabel.Text = "Paint over the object you want to remove, then press \"Preview removal\" (or just OK).";
-        var statusBox = new GroupBox { Text = "Status", Dock = DockStyle.Bottom, Height = S(96) };
+        var statusBox = new GroupBox { Text = "Status", Dock = DockStyle.Bottom, Height = S(130), Padding = new Padding(S(8), S(4), S(8), S(8)) };
         statusBox.Controls.Add(statusLabel);
-        statusLabel.Padding = new Padding(S(4));
 
         // --- brush group
         var brushTable = NewTable(2);
         AddRow(brushTable, "Brush size (px)", brushNum);
         AddWide(brushTable, brushTrack);
+        Wrap(eraseCheck);
         AddWide(brushTable, eraseCheck);
         var brushButtons = new FlowLayoutPanel { AutoSize = true, FlowDirection = FlowDirection.LeftToRight, WrapContents = true };
         brushButtons.Controls.AddRange(new Control[] { undoBtn, clearBtn, fitBtn });
@@ -115,7 +117,7 @@ internal sealed unsafe class ObjectRemoverConfigDialog : EffectConfigForm<Object
         {
             Text = "Wheel: zoom   Ctrl+wheel or [ ]: brush size\nMiddle-drag or Space+drag: pan   Ctrl+Z: undo",
             AutoSize = true,
-            MaximumSize = new Size(S(270), 0),
+            MaximumSize = new Size(S(300), 0),
             ForeColor = SystemColors.GrayText,
         });
         var brushGroup = NewGroup("Highlight brush", brushTable);
@@ -127,16 +129,23 @@ internal sealed unsafe class ObjectRemoverConfigDialog : EffectConfigForm<Object
         AddRow(optTable, "GPU adapter #", adapterNum);
         AddRow(optTable, "Grow mask (px)", expandNum);
         AddRow(optTable, "Edge blend (px)", featherNum);
+        Wrap(autoCheck);
         AddWide(optTable, autoCheck);
+        Wrap(showResultCheck);
         AddWide(optTable, showResultCheck);
+        previewBtn.Dock = DockStyle.None;
+        previewBtn.AutoSize = true;
+        previewBtn.AutoSizeMode = AutoSizeMode.GrowAndShrink;
+        previewBtn.MinimumSize = new Size(0, S(32));
         AddWide(optTable, previewBtn);
         var optGroup = NewGroup("Removal", optTable);
 
         var flow = new TableLayoutPanel
         {
-            Dock = DockStyle.Fill,
+            Dock = DockStyle.Top,
+            AutoSize = true,
+            AutoSizeMode = AutoSizeMode.GrowAndShrink,
             ColumnCount = 1,
-            AutoScroll = true,
         };
         flow.ColumnStyles.Add(new ColumnStyle(SizeType.Percent, 100));
         flow.RowStyles.Add(new RowStyle(SizeType.AutoSize));
@@ -144,7 +153,13 @@ internal sealed unsafe class ObjectRemoverConfigDialog : EffectConfigForm<Object
         flow.Controls.Add(brushGroup, 0, 0);
         flow.Controls.Add(optGroup, 0, 1);
 
-        side.Controls.Add(flow);
+        // Vertical-only scrolling so nothing is ever cut off on small windows / high DPI
+        var scroll = new Panel { Dock = DockStyle.Fill, AutoScroll = true };
+        scroll.HorizontalScroll.Enabled = false;
+        scroll.HorizontalScroll.Visible = false;
+        scroll.Controls.Add(flow);
+
+        side.Controls.Add(scroll);
         side.Controls.Add(statusBox);
         side.Controls.Add(bottom);
 
@@ -173,14 +188,19 @@ internal sealed unsafe class ObjectRemoverConfigDialog : EffectConfigForm<Object
             Text = title,
             AutoSize = true,
             AutoSizeMode = AutoSizeMode.GrowAndShrink,
-            Dock = DockStyle.Fill,
-            MinimumSize = new Size(S(280), 0),
+            Dock = DockStyle.Top,
             Margin = new Padding(0, 0, 0, S(8)),
-            Padding = new Padding(S(6)),
+            Padding = new Padding(S(8), S(4), S(8), S(8)),
         };
         inner.Dock = DockStyle.Top;
         g.Controls.Add(inner);
         return g;
+    }
+
+    private void Wrap(CheckBox c)
+    {
+        c.AutoSize = true;
+        c.MaximumSize = new Size(S(300), 0);
     }
 
     private static void AddRow(TableLayoutPanel t, string label, Control c)
@@ -350,6 +370,32 @@ internal sealed unsafe class ObjectRemoverConfigDialog : EffectConfigForm<Object
 
     private void PushToken() => UpdateTokenFromDialog();
 
+    private void ResetSession(ObjectRemoverToken t)
+    {
+        maskSnapshot = null;
+        bx0 = by0 = bx1 = by1 = 0;
+        revision = Guid.NewGuid();
+        runEnabled = false;
+        shownVersion = 0;
+        lastStatus = "Ready";
+        InpaintEngine.Status = "Ready";
+        resultBmp?.Dispose();
+        resultBmp = null;
+        ResultCache.Clear();
+        if (baseBmp != null)
+        {
+            canvas.SetImage(baseBmp); // fresh empty mask, overlay, undo history and no preview result
+        }
+
+        // The token Paint.NET keeps for live preview must not carry the old selection either
+        t.Mask = null;
+        t.MaskWidth = iw;
+        t.MaskHeight = ih;
+        t.BoundsX0 = t.BoundsY0 = t.BoundsX1 = t.BoundsY1 = 0;
+        t.MaskRevision = revision;
+        t.RunEnabled = false;
+    }
+
     private void InvalidateResult()
     {
         showResultCheck.Checked = false;
@@ -388,9 +434,9 @@ internal sealed unsafe class ObjectRemoverConfigDialog : EffectConfigForm<Object
 
     private void ShowPatch(InpaintPatch p)
     {
-        if (baseBmp == null)
+        if (baseBmp == null || p.X < 0 || p.Y < 0 || p.X + p.Width > baseBmp.Width || p.Y + p.Height > baseBmp.Height)
         {
-            return;
+            return; // stale result from another image
         }
 
         resultBmp?.Dispose();
@@ -435,13 +481,11 @@ internal sealed unsafe class ObjectRemoverConfigDialog : EffectConfigForm<Object
             canvas.BrushSize = t.BrushSize;
             SyncBrush(canvas.BrushSize);
 
-            // Repeat-effect case: restore the previous mask if it fits this image
-            if (!maskLoaded && t.Mask != null && t.MaskWidth == iw && t.MaskHeight == ih)
+            // Every time the dialog opens it starts with a clean slate: no mask, no preview.
+            // (Paint.NET hands us the token of the previous run; its mask belongs to a previous session.)
+            if (!maskLoaded)
             {
-                canvas.LoadMask(t.Mask);
-                maskSnapshot = t.Mask;
-                bx0 = t.BoundsX0; by0 = t.BoundsY0; bx1 = t.BoundsX1; by1 = t.BoundsY1;
-                revision = t.MaskRevision == Guid.Empty ? Guid.NewGuid() : t.MaskRevision;
+                ResetSession(t);
             }
 
             maskLoaded = true;
@@ -456,6 +500,10 @@ internal sealed unsafe class ObjectRemoverConfigDialog : EffectConfigForm<Object
         if (!System.IO.File.Exists(modelPath))
         {
             statusLabel.Text = $"Model file missing: {modelPath}";
+        }
+        else
+        {
+            statusLabel.Text = "Paint over the object you want to remove, then press \"Preview removal\" (or just OK).";
         }
     }
 
@@ -518,9 +566,20 @@ internal sealed unsafe class ObjectRemoverConfigDialog : EffectConfigForm<Object
     {
         timer.Stop();
         timer.Dispose();
-        canvas.SetResultImage(null);
+
+        // Cancel (or closing with the X) discards everything; OK keeps the cached result for the final render.
+        if (DialogResult != DialogResult.OK)
+        {
+            ResultCache.Clear();
+            InpaintEngine.Status = "Ready";
+        }
+
+        canvas.ClearAll();
         resultBmp?.Dispose();
         resultBmp = null;
+        baseBmp?.Dispose();
+        baseBmp = null;
+        maskSnapshot = null;
         base.OnFormClosed(e);
     }
 }
