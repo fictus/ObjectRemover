@@ -1,0 +1,58 @@
+<Project Sdk="Microsoft.NET.Sdk">
+
+  <PropertyGroup>
+    <!-- Where Paint.NET 5.1+ is installed. For the Microsoft Store version, download the
+         portable ZIP from getpaint.net and point this at the extracted folder. -->
+    <PdnRoot Condition="'$(PdnRoot)' == ''">C:\Program Files\paint.net</PdnRoot>
+  </PropertyGroup>
+
+  <PropertyGroup>
+    <TargetFramework>net9.0-windows</TargetFramework>
+    <RuntimeIdentifier>win-x64</RuntimeIdentifier>
+    <SelfContained>false</SelfContained>
+    <PlatformTarget>x64</PlatformTarget>
+    <AssemblyName>ObjectRemover</AssemblyName>
+    <RootNamespace>ObjectRemoverPlugin</RootNamespace>
+    <Nullable>enable</Nullable>
+    <ImplicitUsings>enable</ImplicitUsings>
+    <LangVersion>latest</LangVersion>
+    <ImportWindowsDesktopTargets>true</ImportWindowsDesktopTargets>
+    <UseWindowsForms>true</UseWindowsForms>
+    <UseWPF>true</UseWPF>
+    <AllowUnsafeBlocks>true</AllowUnsafeBlocks>
+    <!-- Copy the NuGet versions we reference (ONNX Runtime etc.) next to the plugin DLL -->
+    <CopyLocalLockFileAssemblies>true</CopyLocalLockFileAssemblies>
+    <ProduceReferenceAssembly>false</ProduceReferenceAssembly>
+    <Deterministic>false</Deterministic>
+    <AssemblyVersion>1.0.*</AssemblyVersion>
+    <GenerateDocumentationFile>false</GenerateDocumentationFile>
+    <NoWarn>1701;1702;CS7035;MSB3277;CA1416</NoWarn>
+
+    <!-- Read by PluginSupportInfo (shown in Paint.NET's plugin list) -->
+    <Product>AI Object Remover</Product>
+    <Copyright>Object Remover plugin</Copyright>
+    <Description>Remove objects from images with LaMa / MI-GAN inpainting (GPU via DirectML or CPU).</Description>
+  </PropertyGroup>
+
+  <ItemGroup>
+    <!-- DirectML build contains both the DirectML (GPU) and CPU execution providers -->
+    <PackageReference Include="Microsoft.ML.OnnxRuntime.DirectML" Version="1.24.4" />
+  </ItemGroup>
+
+  <ItemGroup>
+    <!-- Paint.NET assemblies: Private=False so they are NOT copied to the output folder -->
+    <Reference Include="PaintDotNet.Base"><HintPath>$(PdnRoot)\PaintDotNet.Base.dll</HintPath><Private>False</Private></Reference>
+    <Reference Include="PaintDotNet.ComponentModel"><HintPath>$(PdnRoot)\PaintDotNet.ComponentModel.dll</HintPath><Private>False</Private></Reference>
+    <Reference Include="PaintDotNet.Core"><HintPath>$(PdnRoot)\PaintDotNet.Core.dll</HintPath><Private>False</Private></Reference>
+    <Reference Include="PaintDotNet.Effects.Core"><HintPath>$(PdnRoot)\PaintDotNet.Effects.Core.dll</HintPath><Private>False</Private></Reference>
+    <Reference Include="PaintDotNet.Fundamentals"><HintPath>$(PdnRoot)\PaintDotNet.Fundamentals.dll</HintPath><Private>False</Private></Reference>
+    <Reference Include="PaintDotNet.Framework"><HintPath>$(PdnRoot)\PaintDotNet.Framework.dll</HintPath><Private>False</Private></Reference>
+    <Reference Include="PaintDotNet.Primitives"><HintPath>$(PdnRoot)\PaintDotNet.Primitives.dll</HintPath><Private>False</Private></Reference>
+    <Reference Include="PaintDotNet.ObjectModel"><HintPath>$(PdnRoot)\PaintDotNet.ObjectModel.dll</HintPath><Private>False</Private></Reference>
+    <Reference Include="PaintDotNet.PropertySystem"><HintPath>$(PdnRoot)\PaintDotNet.PropertySystem.dll</HintPath><Private>False</Private></Reference>
+    <Reference Include="PaintDotNet.Windows"><HintPath>$(PdnRoot)\PaintDotNet.Windows.dll</HintPath><Private>False</Private></Reference>
+    <Reference Include="PaintDotNet.Windows.Core"><HintPath>$(PdnRoot)\PaintDotNet.Windows.Core.dll</HintPath><Private>False</Private></Reference>
+    <Reference Include="PaintDotNet.Windows.Framework"><HintPath>$(PdnRoot)\PaintDotNet.Windows.Framework.dll</HintPath><Private>False</Private></Reference>
+  </ItemGroup>
+
+</Project>
