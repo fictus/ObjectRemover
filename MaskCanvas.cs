@@ -7,7 +7,8 @@ namespace ObjectRemoverPlugin;
 /// <summary>
 /// Image viewer with a highlight brush. Left button paints, right button erases (or toggle Eraser).
 /// Mouse wheel zooms, Ctrl+wheel (or [ and ]) changes the brush size, middle button / Space+drag pans,
-/// Ctrl+Z undoes the last stroke.
+/// Shift+wheel / Alt+wheel scroll horizontally / vertically, scrollbars appear when the image is larger
+/// than the view. Ctrl+Z undoes the last stroke.
 /// </summary>
 internal sealed unsafe class MaskCanvas : Control
 {
@@ -31,6 +32,10 @@ internal sealed unsafe class MaskCanvas : Control
     private int brushSize = 40;
     private bool showResult;
 
+    private readonly HScrollBar hBar = new() { TabStop = false, Visible = false };
+    private readonly VScrollBar vBar = new() { TabStop = false, Visible = false };
+    private bool syncingBars;
+
     private Dictionary<long, byte[]>? stroke;
     private readonly List<Dictionary<long, byte[]>> undo = new();
 
@@ -46,6 +51,13 @@ internal sealed unsafe class MaskCanvas : Control
         SetStyle(ControlStyles.Selectable | ControlStyles.UserMouse, true);
         BackColor = Color.FromArgb(48, 48, 48);
         Cursor = Cursors.Cross;
+
+        hBar.Scroll += (_, _) => OnBarScroll();
+        vBar.Scroll += (_, _) => OnBarScroll();
+        hBar.ValueChanged += (_, _) => OnBarScroll();
+        vBar.ValueChanged += (_, _) => OnBarScroll();
+        Controls.Add(hBar);
+        Controls.Add(vBar);
     }
 
     [DesignerSerializationVisibility(DesignerSerializationVisibility.Hidden)]
@@ -113,6 +125,7 @@ internal sealed unsafe class MaskCanvas : Control
         undo.Clear();
         overlay?.Dispose();
         overlay = null;
+        hBar.Visible = vBar.Visible = false;
         Invalidate();
     }
 
@@ -409,10 +422,121 @@ internal sealed unsafe class MaskCanvas : Control
             return;
         }
 
+        // Fit against the full control size (no scrollbars are needed once the image fits)
         zoom = Math.Min((Width - 8f) / iw, (Height - 8f) / ih);
         zoom = Math.Clamp(zoom, 0.02f, 40f);
         pan = new PointF((Width - iw * zoom) / 2f, (Height - ih * zoom) / 2f);
         autoFit = true;
+        ClampPan();
+        Invalidate();
+    }
+
+    // ---------------------------------------------------------------------------------------------
+    // Scrolling
+    // ---------------------------------------------------------------------------------------------
+
+    /// <summary>Size of the area the image is drawn in (the control minus any visible scrollbars).</summary>
+    private Size ViewSize => new(
+        Math.Max(1, Width - (vBar.Visible ? vBar.Width : 0)),
+        Math.Max(1, Height - (hBar.Visible ? hBar.Height : 0)));
+
+    /// <summary>
+    /// Keeps the image reachable: if it is larger than the view it may be scrolled until half a
+    /// viewport of empty space shows beyond its edge; otherwise it is centred. Then updates the scrollbars.
+    /// </summary>
+    private void ClampPan()
+    {
+        if (baseImage == null)
+        {
+            hBar.Visible = vBar.Visible = false;
+            return;
+        }
+
+        // Scrollbar visibility affects the view size, which affects visibility: settle in two passes.
+        for (int pass = 0; pass < 2; pass++)
+        {
+            Size vs = ViewSize;
+            bool needH = iw * zoom > vs.Width + 0.5f;
+            bool needV = ih * zoom > vs.Height + 0.5f;
+            if (needH != hBar.Visible || needV != vBar.Visible)
+            {
+                hBar.Visible = needH;
+                vBar.Visible = needV;
+            }
+            else
+            {
+                break;
+            }
+        }
+
+        Size v = ViewSize;
+        pan = new PointF(ClampAxis(pan.X, iw * zoom, v.Width), ClampAxis(pan.Y, ih * zoom, v.Height));
+        LayoutBars();
+        SyncBars();
+    }
+
+    private static float ClampAxis(float p, float content, int view)
+    {
+        if (content <= view)
+        {
+            return (view - content) / 2f;
+        }
+
+        float margin = view / 2f;
+        return Math.Clamp(p, view - content - margin, margin);
+    }
+
+    private void LayoutBars()
+    {
+        int sw = SystemInformation.VerticalScrollBarWidth;
+        int sh = SystemInformation.HorizontalScrollBarHeight;
+        vBar.SetBounds(Width - sw, 0, sw, Math.Max(1, Height - (hBar.Visible ? sh : 0)));
+        hBar.SetBounds(0, Height - sh, Math.Max(1, Width - (vBar.Visible ? sw : 0)), sh);
+    }
+
+    private void SyncBars()
+    {
+        Size vs = ViewSize;
+        syncingBars = true;
+        try
+        {
+            ConfigureBar(hBar, iw * zoom, vs.Width, pan.X);
+            ConfigureBar(vBar, ih * zoom, vs.Height, pan.Y);
+        }
+        finally
+        {
+            syncingBars = false;
+        }
+    }
+
+    private static void ConfigureBar(ScrollBar bar, float content, int view, float pan)
+    {
+        if (!bar.Visible)
+        {
+            return;
+        }
+
+        // Scroll position = how far the view's top/left edge is from the image's top/left edge (screen px)
+        int margin = view / 2;
+        int lo = -margin;
+        int hi = (int)Math.Ceiling(content) + margin;
+        bar.Minimum = lo;
+        bar.LargeChange = Math.Max(1, view);
+        bar.SmallChange = Math.Max(1, view / 10);
+        bar.Maximum = hi;
+        int max = Math.Max(lo, hi - bar.LargeChange + 1);
+        bar.Value = Math.Clamp((int)Math.Round(-pan), lo, max);
+    }
+
+    private void OnBarScroll()
+    {
+        if (syncingBars || baseImage == null)
+        {
+            return;
+        }
+
+        pan = new PointF(hBar.Visible ? -hBar.Value : pan.X, vBar.Visible ? -vBar.Value : pan.Y);
+        autoFit = false;
         Invalidate();
     }
 
@@ -439,6 +563,11 @@ internal sealed unsafe class MaskCanvas : Control
         if (autoFit)
         {
             Fit();
+        }
+        else
+        {
+            ClampPan();
+            Invalidate();
         }
     }
 
@@ -488,6 +617,7 @@ internal sealed unsafe class MaskCanvas : Control
             pan = new PointF(pan.X + e.X - lastMouse.X, pan.Y + e.Y - lastMouse.Y);
             lastMouse = e.Location;
             autoFit = false;
+            ClampPan();
             Invalidate();
             return;
         }
@@ -555,12 +685,24 @@ internal sealed unsafe class MaskCanvas : Control
             return;
         }
 
+        if ((ModifierKeys & (Keys.Shift | Keys.Alt)) != 0)
+        {
+            // Shift+wheel scrolls horizontally, Alt+wheel vertically
+            float step = e.Delta / 120f * 60f;
+            pan = (ModifierKeys & Keys.Shift) != 0 ? new PointF(pan.X + step, pan.Y) : new PointF(pan.X, pan.Y + step);
+            autoFit = false;
+            ClampPan();
+            Invalidate();
+            return;
+        }
+
         float f = e.Delta > 0 ? 1.2f : 1f / 1.2f;
         float newZoom = Math.Clamp(zoom * f, 0.02f, 40f);
         f = newZoom / zoom;
         pan = new PointF(e.X - (e.X - pan.X) * f, e.Y - (e.Y - pan.Y) * f);
         zoom = newZoom;
         autoFit = false;
+        ClampPan();
         Invalidate();
     }
 

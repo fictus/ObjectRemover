@@ -110,7 +110,7 @@ The first run is slow because the model has to load, and on the GPU there is a s
 | Erase part of the mask | Tick **Eraser**, or right-click and drag |
 | Change brush size | **Brush size** box or slider (2 to 400 px), Ctrl + mouse wheel, or the `[` and `]` keys |
 | Zoom | Mouse wheel |
-| Pan | Middle-drag, or hold Space and drag |
+| Pan | Scrollbars, middle-drag, or hold Space and drag. Shift+wheel scrolls horizontally, Alt+wheel vertically |
 | Undo last stroke | **Undo** button or Ctrl+Z (up to 40 strokes) |
 | Clear the whole mask | **Clear mask** |
 | Reset the view | **Fit view** |
