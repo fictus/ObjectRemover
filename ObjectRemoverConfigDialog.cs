@@ -283,6 +283,13 @@ internal sealed unsafe class ObjectRemoverConfigDialog : EffectConfigForm<Object
         previewBtn.Click += (_, _) => RequestRun();
         okBtn.Click += (_, _) =>
         {
+            // The model is only needed when there is something to remove. If it is missing, offer to download it
+            // (resumable) and stay in the dialog unless that succeeds.
+            if (HasMask && !EnsureModelAvailable())
+            {
+                return;
+            }
+
             runEnabled = HasMask;
             PushToken();
             DialogResult = DialogResult.OK;
@@ -356,9 +363,8 @@ internal sealed unsafe class ObjectRemoverConfigDialog : EffectConfigForm<Object
             return;
         }
 
-        if (!System.IO.File.Exists(InpaintEngine.ModelPath(SelectedModel)))
+        if (!EnsureModelAvailable())
         {
-            statusLabel.Text = $"Model file missing: {InpaintEngine.ModelPath(SelectedModel)}";
             return;
         }
 
@@ -369,6 +375,52 @@ internal sealed unsafe class ObjectRemoverConfigDialog : EffectConfigForm<Object
     }
 
     private void PushToken() => UpdateTokenFromDialog();
+
+    /// <summary>Returns true when the selected model is on disk, offering a resumable download if it is not.</summary>
+    private bool EnsureModelAvailable()
+    {
+        bool selectedPresent = ModelStore.Exists(SelectedModel);
+        List<ModelInfo> missing = ModelStore.Missing();
+        long resumed = missing.Sum(ModelStore.PartialBytes);
+
+        // Nothing to ask if the selected model is there and no unfinished download is waiting to be resumed
+        if (selectedPresent && resumed == 0)
+        {
+            return true;
+        }
+
+        string list = string.Join("\r\n", missing.Select(m => $"   \u2022 {m.DisplayName} ({m.ApproxSize})"));
+        string text = "AI Object Remover needs its AI model files, which haven't been downloaded yet:\r\n\r\n" + list +
+            "\r\n\r\nThey will be saved to:\r\n" + ModelStore.SharedDir +
+            "\r\n(shared with your other Paint.NET plugins)." +
+            (resumed > 0 ? "\r\n\r\nAn earlier partial download was found and will be resumed." : "") +
+            "\r\n\r\nDownload now?";
+
+        if (MessageBox.Show(this, text, "Download AI models", MessageBoxButtons.YesNo, MessageBoxIcon.Question) != DialogResult.Yes)
+        {
+            if (selectedPresent)
+            {
+                return true; // the unfinished model isn't needed right now
+            }
+
+            statusLabel.Text = "The models haven't been downloaded. Click OK again when you're ready to download them.";
+            return false;
+        }
+
+        using var dlg = new ModelDownloadDialog(missing, BackColor, ForeColor);
+        dlg.ShowDialog(this);
+
+        if (ModelStore.Exists(SelectedModel))
+        {
+            statusLabel.Text = "Models downloaded.";
+            return true;
+        }
+
+        statusLabel.Text = dlg.Error != null
+            ? "Download interrupted: " + dlg.Error + " Click OK to resume."
+            : "Download cancelled. Click OK to resume it.";
+        return false;
+    }
 
     private void ResetSession(ObjectRemoverToken t)
     {
@@ -499,7 +551,7 @@ internal sealed unsafe class ObjectRemoverConfigDialog : EffectConfigForm<Object
         string modelPath = InpaintEngine.ModelPath(SelectedModel);
         if (!System.IO.File.Exists(modelPath))
         {
-            statusLabel.Text = $"Model file missing: {modelPath}";
+            statusLabel.Text = "The AI models haven't been downloaded yet. Paint over an object and click OK, and you'll be offered the download.";
         }
         else
         {

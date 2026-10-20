@@ -96,8 +96,8 @@ internal static class InpaintEngine
         }
     }
 
-    public static string ModelPath(ModelKind kind) =>
-        System.IO.Path.Combine(PluginDir, "Models", kind == ModelKind.Lama ? "lama_fp32.onnx" : "migan_pipeline_v2.onnx");
+    /// <summary>Shared models folder first (%LocalAppData%\paint.net-shared\models), then the legacy Models folder next to the DLL.</summary>
+    public static string ModelPath(ModelKind kind) => ModelStore.PathFor(kind);
 
     // ---------------------------------------------------------------------------------------------
     // Session management
@@ -129,7 +129,7 @@ internal static class InpaintEngine
         if (!System.IO.File.Exists(path))
         {
             throw new System.IO.FileNotFoundException(
-                $"Model file not found: {path}. Copy the plugin's Models folder next to ObjectRemover.dll.");
+                $"Model file not found: {path}. Click OK in the plugin dialog to download the models, or copy them into {ModelStore.SharedDir}.");
         }
 
         OrtBootstrap.EnsureLoaded();

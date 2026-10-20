@@ -32,12 +32,13 @@ Paint.NET\Effects\ObjectRemover\
     onnxruntime.dll                    <- native ONNX Runtime
     DirectML.dll                       <- native DirectML (GPU support)
     (any other DLLs the build copies, except PaintDotNet.* and System.*)
-    Models\
-        lama_fp32.onnx                 <- LaMa model
-        migan_pipeline_v2.onnx         <- MI-GAN model
+
+%LocalAppData%\paint.net-shared\models\
+    lama_fp32.onnx                     <- LaMa model (downloaded by the plugin)
+    migan_pipeline_v2.onnx             <- MI-GAN model (downloaded by the plugin)
 ```
 
-You can install only one of the two models and select just that one in the dialog.
+The models live in a common folder, `%LocalAppData%\paint.net-shared\models\`, so other Paint.NET plugins can share them. You can install only one of the two models and select just that one in the dialog.
 
 ## Step 1: Build the plugin
 
@@ -67,14 +68,20 @@ You can install only one of the two models and select just that one in the dialo
 
 If the build reports that it cannot find `PaintDotNet.*` assemblies, `PdnRoot` is pointing at the wrong folder.
 
-## Step 2: Download the models
+## Step 2: Get the models (automatic)
+
+You don't need to download anything by hand. The first time you paint over an object and click **OK** (or **Preview removal**) while a model is missing, the plugin asks whether to download the missing models and shows a progress window.
+
+- Files are saved to `%LocalAppData%\paint.net-shared\models\`.
+- Downloads are **resumable**. If your connection drops or you cancel, the partial file (`*.part`) is kept. Click **OK** again and the download continues where it stopped.
+- If the plugin finds a model in the old `Models` folder next to `ObjectRemover.dll`, it still uses it.
+
+To download manually instead (for example on an offline PC), put the files in the folder above under exactly these names:
 
 | Model | Download page | File to download | Save as |
 |---|---|---|---|
-| LaMa (Apache-2.0) | https://huggingface.co/Carve/LaMa-ONNX | `lama_fp32.onnx` (about 208 MB) | `Models\lama_fp32.onnx` |
-| MI-GAN (MIT) | https://huggingface.co/andraniksargsyan/migan | `migan/migan_pipeline_v2.onnx` (about 28 MB) | `Models\migan_pipeline_v2.onnx` |
-
-Use exactly these files:
+| LaMa (Apache-2.0) | https://huggingface.co/Carve/LaMa-ONNX | `lama_fp32.onnx` (about 208 MB) | `lama_fp32.onnx` |
+| MI-GAN (MIT) | https://huggingface.co/andraniksargsyan/migan | `migan_pipeline_v2.onnx` (about 28 MB, at the top level of the repo) | `migan_pipeline_v2.onnx` |
 
 - For LaMa, use `lama_fp32.onnx`, not `lama.onnx`.
 - For MI-GAN, use the **pipeline v2** file, not `migan.onnx`.
@@ -85,11 +92,10 @@ Use exactly these files:
 1. Create the folder `C:\Program Files\Paint.NET\Effects\ObjectRemover\` (administrator rights are needed to write into Program Files).
 2. Copy in `ObjectRemover.dll`, `Microsoft.ML.OnnxRuntime.dll`, `onnxruntime.dll`, `DirectML.dll` and any other DLLs the build output contains.
 3. Do **not** copy `PaintDotNet.*.dll` or `System.*.dll` files. Paint.NET already provides them.
-4. Create a `Models` subfolder and put the model file(s) in it.
-5. If Windows blocked the DLLs, right-click each one, choose **Properties**, and tick **Unblock**.
-6. Restart Paint.NET.
+4. If Windows blocked the DLLs, right-click each one, choose **Properties**, and tick **Unblock**.
+5. Restart Paint.NET.
 
-If you are updating the plugin, delete the old files in the folder first (keep `Models`), then copy the new build in.
+If you are updating the plugin, delete the old files in the folder first (downloaded models are stored separately and are kept), then copy the new build in.
 
 ## How to use it
 
@@ -141,7 +147,8 @@ The first run is slow because the model has to load, and on the GPU there is a s
 | The effect doesn't appear in the menu | Wrong folder, a blocked DLL, a build for the wrong .NET version, or Paint.NET older than 5.1. Check the Paint.NET error dialog at startup. |
 | `Could not load file or assembly 'System.Runtime, Version=10.0.0.0'` | The plugin targets a newer .NET than Paint.NET. Set `<TargetFramework>` to `net9.0-windows` (match `paintdotnet.runtimeconfig.json`) and rebuild. |
 | Build errors about `PaintDotNet` types not found | `PdnRoot` does not point at the folder containing `PaintDotNet.Base.dll`. |
-| "Model file not found" | The `Models` folder is missing, or the filename is wrong or in the wrong place. |
+| "Model file not found" | The models haven't been downloaded. Click OK in the plugin to download them, or place the files in `%LocalAppData%\paint.net-shared\models\` with the exact filenames. |
+| Download keeps stopping | Click OK again; the download resumes from the partial `.part` file. If it never starts, check your firewall or proxy allows `huggingface.co`. |
 | Status says GPU not usable, used CPU | The GPU or driver can't run that model through DirectML. It still works on the CPU. You can set **Processor** to CPU to skip the GPU test. |
 | Errors mentioning `onnxruntime` or `DirectML` | The native DLLs are missing or not in the same folder as `ObjectRemover.dll`. |
 | Very slow results | You are on the CPU, or processing a very large object with LaMa. Try MI-GAN or a smaller mask. |
