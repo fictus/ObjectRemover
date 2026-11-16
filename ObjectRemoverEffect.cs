@@ -118,6 +118,7 @@ public sealed class ObjectRemoverEffect : BitmapEffect<ObjectRemoverToken>
             }
             catch (Exception ex)
             {
+                PluginLog.Error("Object removal failed.", ex);
                 InpaintEngine.Status = "Error: " + ex.Message;
                 ResultCache.Store(key, runKey, null, ex.Message);
                 return null;

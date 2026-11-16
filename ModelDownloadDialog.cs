@@ -10,7 +10,9 @@ internal sealed class ModelDownloadDialog : Form
     private readonly Label headline = new() { AutoSize = false, Dock = DockStyle.Fill, TextAlign = ContentAlignment.BottomLeft };
     private readonly ProgressBar bar = new() { Dock = DockStyle.Fill, Minimum = 0, Maximum = 1000, Style = ProgressBarStyle.Marquee };
     private readonly Label detail = new() { AutoSize = false, Dock = DockStyle.Fill, TextAlign = ContentAlignment.TopLeft };
-    private readonly Button cancelBtn = new() { Text = "Cancel", Width = 90, Height = 28, Anchor = AnchorStyles.Right };
+    private readonly Button cancelBtn = new() { Text = "Cancel", Width = 90, Height = 28, Margin = new Padding(6, 3, 0, 3) };
+    private readonly Button copyBtn = new() { Text = "Copy details", Width = 100, Height = 28, Margin = new Padding(6, 3, 0, 3), Visible = false };
+    private readonly Button logBtn = new() { Text = "Open log", Width = 90, Height = 28, Margin = new Padding(6, 3, 0, 3), Visible = false };
     private readonly CancellationTokenSource cts = new();
     private readonly Stopwatch clock = new();
     private bool finished;
@@ -32,22 +34,31 @@ internal sealed class ModelDownloadDialog : Form
         MaximizeBox = false;
         MinimizeBox = false;
         ShowInTaskbar = false;
-        ClientSize = new Size(470, 150);
+        ClientSize = new Size(540, 220);
         BackColor = back;
         ForeColor = fore;
 
         var layout = new TableLayoutPanel { Dock = DockStyle.Fill, ColumnCount = 1, RowCount = 4, Padding = new Padding(14, 10, 14, 10) };
-        layout.RowStyles.Add(new RowStyle(SizeType.Percent, 38));
+        layout.RowStyles.Add(new RowStyle(SizeType.Absolute, 30));
         layout.RowStyles.Add(new RowStyle(SizeType.Absolute, 24));
-        layout.RowStyles.Add(new RowStyle(SizeType.Percent, 38));
-        layout.RowStyles.Add(new RowStyle(SizeType.Absolute, 34));
+        layout.RowStyles.Add(new RowStyle(SizeType.Percent, 100));
+        layout.RowStyles.Add(new RowStyle(SizeType.Absolute, 38));
+
+        // Right-aligned button row; with RightToLeft flow the first control added ends up rightmost
+        var buttons = new FlowLayoutPanel { Dock = DockStyle.Fill, FlowDirection = FlowDirection.RightToLeft, WrapContents = false };
+        buttons.Controls.Add(cancelBtn);
+        buttons.Controls.Add(logBtn);
+        buttons.Controls.Add(copyBtn);
+
         layout.Controls.Add(headline, 0, 0);
         layout.Controls.Add(bar, 0, 1);
         layout.Controls.Add(detail, 0, 2);
-        layout.Controls.Add(cancelBtn, 0, 3);
+        layout.Controls.Add(buttons, 0, 3);
         Controls.Add(layout);
 
         headline.Text = "Starting download...";
+        copyBtn.Click += (_, _) => CopyDetails();
+        logBtn.Click += (_, _) => OpenLog();
         cancelBtn.Click += (_, _) =>
         {
             if (finished)
@@ -97,6 +108,7 @@ internal sealed class ModelDownloadDialog : Form
     private async Task RunAsync()
     {
         var progress = new UiProgress(p => OnUi(() => Report(p)));
+        PluginLog.Info("Download window opened.");
         try
         {
             await ModelStore.DownloadAsync(models, progress, cts.Token).ConfigureAwait(false);
@@ -108,6 +120,7 @@ internal sealed class ModelDownloadDialog : Form
         }
         catch (OperationCanceledException)
         {
+            PluginLog.Info("Download cancelled by the user.");
             OnUi(() =>
             {
                 finished = true;
@@ -116,15 +129,19 @@ internal sealed class ModelDownloadDialog : Form
         }
         catch (Exception ex)
         {
+            PluginLog.Error("Model download failed.", ex);
             OnUi(() =>
             {
                 finished = true;
                 Error = Describe(ex);
                 bar.Style = ProgressBarStyle.Continuous;
-                headline.Text = "The download was interrupted.";
-                detail.Text = Error + "\r\nYour progress is saved. Click OK in the plugin again to resume.";
+                bar.Value = 0;
+                headline.Text = "The download did not complete.";
+                detail.Text = Error + "\r\n\r\nDetails were saved to:\r\n" + PluginLog.FilePath;
                 cancelBtn.Text = "Close";
                 cancelBtn.Enabled = true;
+                copyBtn.Visible = true;
+                logBtn.Visible = true;
             });
         }
     }
@@ -183,14 +200,58 @@ internal sealed class ModelDownloadDialog : Form
         detail.Text = $"{FormatBytes(p.Done)} of {FormatBytes(p.Total)}  ({p.Done * 100 / p.Total}%){speed}";
     }
 
-    private static string Describe(Exception ex) => ex switch
+    private static string Describe(Exception ex)
     {
-        HttpRequestException h when h.StatusCode != null => $"The server answered with an error ({(int)h.StatusCode}).",
-        HttpRequestException => "Couldn't reach the download server. Check your internet connection.",
-        System.IO.IOException io => io.Message,
-        UnauthorizedAccessException => "Couldn't write to " + ModelStore.SharedDir + ".",
-        _ => ex.Message,
-    };
+        string hint = PluginLog.NetworkHint(ex);
+        return ex switch
+        {
+            ModelDownloadException => ex.Message, // already written for the user
+            HttpRequestException h when h.StatusCode != null => $"The server answered with an error ({(int)h.StatusCode}). {PluginLog.RootMessage(ex)}",
+            HttpRequestException => "Couldn't reach the download server. " + PluginLog.RootMessage(ex) + (hint.Length > 0 ? " " + hint : " Check your internet connection and any firewall or proxy."),
+            System.IO.IOException io => io.Message,
+            UnauthorizedAccessException => "Couldn't write to " + ModelStore.SharedDir + ". " + ex.Message,
+            _ => ex.GetType().Name + ": " + ex.Message,
+        };
+    }
+
+    /// <summary>Puts a ready-to-paste problem report (error + the end of the log) on the clipboard.</summary>
+    private void CopyDetails()
+    {
+        try
+        {
+            string report = "AI Object Remover - model download problem\r\n" +
+                            "Error: " + Error + "\r\n" +
+                            "Log file: " + PluginLog.FilePath + "\r\n\r\n" +
+                            "--- end of log ---\r\n" + PluginLog.ReadTail();
+            Clipboard.SetText(report);
+            copyBtn.Text = "Copied!";
+        }
+        catch (Exception ex)
+        {
+            PluginLog.Warn("Couldn't copy details to the clipboard: " + ex.Message);
+            MessageBox.Show(this, "Couldn't use the clipboard. Please attach the log file instead:\r\n" + PluginLog.FilePath, "Copy details", MessageBoxButtons.OK, MessageBoxIcon.Information);
+        }
+    }
+
+    private void OpenLog()
+    {
+        try
+        {
+            if (System.IO.File.Exists(PluginLog.FilePath))
+            {
+                Process.Start(new ProcessStartInfo("explorer.exe", "/select,\"" + PluginLog.FilePath + "\"") { UseShellExecute = true });
+            }
+            else
+            {
+                Process.Start(new ProcessStartInfo(PluginLog.LogDir) { UseShellExecute = true });
+            }
+        }
+        catch (Exception ex)
+        {
+            PluginLog.Warn("Couldn't open the log folder: " + ex.Message);
+            MessageBox.Show(this, "The log file is here:\r\n" + PluginLog.FilePath, "Log file", MessageBoxButtons.OK, MessageBoxIcon.Information);
+        }
+    }
 
     private static string FormatBytes(long b) => b >= 1L << 20 ? $"{b / 1048576.0:0.0} MB" : $"{b / 1024.0:0} KB";
 

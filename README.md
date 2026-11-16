@@ -148,7 +148,9 @@ The first run is slow because the model has to load, and on the GPU there is a s
 | `Could not load file or assembly 'System.Runtime, Version=10.0.0.0'` | The plugin targets a newer .NET than Paint.NET. Set `<TargetFramework>` to `net9.0-windows` (match `paintdotnet.runtimeconfig.json`) and rebuild. |
 | Build errors about `PaintDotNet` types not found | `PdnRoot` does not point at the folder containing `PaintDotNet.Base.dll`. |
 | "Model file not found" | The models haven't been downloaded. Click OK in the plugin to download them, or place the files in `%LocalAppData%\paint.net-shared\models\` with the exact filenames. |
+| Download fails, or only tiny (a few KB) model files appear | A firewall, proxy or content filter is almost certainly answering with a small web page instead of the model. The plugin now detects this, refuses to keep the file, and tells you which server answered. Allow access to `huggingface.co` **and** the download server named in the error message (Hugging Face redirects to a separate CDN host), then click OK to try again. Or download the models by hand (see Step 2). |
 | Download keeps stopping | Click OK again; the download resumes from the partial `.part` file. If it never starts, check your firewall or proxy allows `huggingface.co`. |
+| I need to report a problem | The plugin writes a log to `%LocalAppData%\paint.net-shared\logs\ObjectRemover.log`. In the download window use **Copy details** (copies the error plus the end of the log) or **Open log**, and attach the log to your report. |
 | Status says GPU not usable, used CPU | The GPU or driver can't run that model through DirectML. It still works on the CPU. You can set **Processor** to CPU to skip the GPU test. |
 | Errors mentioning `onnxruntime` or `DirectML` | The native DLLs are missing or not in the same folder as `ObjectRemover.dll`. |
 | Very slow results | You are on the CPU, or processing a very large object with LaMa. Try MI-GAN or a smaller mask. |

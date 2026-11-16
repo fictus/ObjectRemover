@@ -128,8 +128,17 @@ internal static class InpaintEngine
         string path = ModelPath(o.Model);
         if (!System.IO.File.Exists(path))
         {
+            PluginLog.Error($"Model file not found: {path}");
             throw new System.IO.FileNotFoundException(
                 $"Model file not found: {path}. Click OK in the plugin dialog to download the models, or copy them into {ModelStore.SharedDir}.");
+        }
+
+        if (!ModelStore.Exists(o.Model))
+        {
+            long size = new System.IO.FileInfo(path).Length;
+            PluginLog.Error($"Model file {path} is only {size:N0} bytes; it is incomplete or is not a model (e.g. a firewall's error page).");
+            throw new System.IO.InvalidDataException(
+                $"The model file {path} is incomplete ({size:N0} bytes). Delete it and click OK in the plugin dialog to download it again. See {PluginLog.FilePath} for details.");
         }
 
         OrtBootstrap.EnsureLoaded();
@@ -168,11 +177,22 @@ internal static class InpaintEngine
                 candidate?.Dispose();
                 GpuBroken.Add(brokenKey);
                 lastGpuFailure = Short(ex.Message);
+                PluginLog.Warn($"GPU unusable for {o.Model} (adapter {o.GpuAdapter}); falling back to CPU. {ex}");
             }
         }
 
         Status = "Loading model on CPU...";
-        session = CreateSession(path, false, 0);
+        try
+        {
+            session = CreateSession(path, false, 0);
+        }
+        catch (Exception ex)
+        {
+            PluginLog.Error($"Couldn't load model {path} ({new System.IO.FileInfo(path).Length:N0} bytes).", ex);
+            throw new System.IO.InvalidDataException(
+                $"The model file {path} couldn't be loaded ({Short(ex.Message)}). It may be damaged: delete it and click OK in the plugin dialog to download it again. See {PluginLog.FilePath} for details.", ex);
+        }
+
         sessionModel = o.Model;
         sessionGpu = false;
         sessionAdapter = o.GpuAdapter;

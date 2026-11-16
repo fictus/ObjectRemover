@@ -390,10 +390,17 @@ internal sealed unsafe class ObjectRemoverConfigDialog : EffectConfigForm<Object
         }
 
         string list = string.Join("\r\n", missing.Select(m => $"   \u2022 {m.DisplayName} ({m.ApproxSize})"));
+        List<string> broken = missing.Where(m => ModelStore.IncompleteFileSize(m).HasValue)
+            .Select(m => $"{m.FileName} ({ModelStore.IncompleteFileSize(m):N0} bytes)").ToList();
+        if (broken.Count > 0)
+        {
+            PluginLog.Warn("Incomplete model file(s) found: " + string.Join(", ", broken));
+        }
         string text = "AI Object Remover needs its AI model files, which haven't been downloaded yet:\r\n\r\n" + list +
             "\r\n\r\nThey will be saved to:\r\n" + ModelStore.SharedDir +
             "\r\n(shared with your other Paint.NET plugins)." +
             (resumed > 0 ? "\r\n\r\nAn earlier partial download was found and will be resumed." : "") +
+            (broken.Count > 0 ? "\r\n\r\nA previous download left an incomplete file that will be replaced: " + string.Join(", ", broken) + "." : "") +
             "\r\n\r\nDownload now?";
 
         if (MessageBox.Show(this, text, "Download AI models", MessageBoxButtons.YesNo, MessageBoxIcon.Question) != DialogResult.Yes)
@@ -417,7 +424,7 @@ internal sealed unsafe class ObjectRemoverConfigDialog : EffectConfigForm<Object
         }
 
         statusLabel.Text = dlg.Error != null
-            ? "Download interrupted: " + dlg.Error + " Click OK to resume."
+            ? "Download failed: " + dlg.Error + " (Log: " + PluginLog.FilePath + ")  Click OK to try again."
             : "Download cancelled. Click OK to resume it.";
         return false;
     }
@@ -548,8 +555,7 @@ internal sealed unsafe class ObjectRemoverConfigDialog : EffectConfigForm<Object
             initialized = true;
         }
 
-        string modelPath = InpaintEngine.ModelPath(SelectedModel);
-        if (!System.IO.File.Exists(modelPath))
+        if (!ModelStore.Exists(SelectedModel))
         {
             statusLabel.Text = "The AI models haven't been downloaded yet. Paint over an object and click OK, and you'll be offered the download.";
         }
